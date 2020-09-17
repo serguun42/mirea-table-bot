@@ -1,0 +1,46 @@
+{
+	"TELEGRAM_BOT_TOKEN": "123467890:AAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+	"ADMIN_TELEGRAM_DATA": {
+		"id": 12345679000000,
+		"username": "admin_username"
+	},
+	"START_OF_WEEKS": 1598821200000,
+	"LESSON_TIMES": [
+		"9:00 - 10:30",
+		"10:40 - 12:10",
+		"12:40 - 14:10",
+		"14:20 - 15:50",
+		"16:20 - 17:50",
+		"18:00 - 19:30"
+	],
+	"DAYS_OF_WEEK": [
+		"понедельник",
+		"вторник",
+		"среда",
+		"четверг",
+		"пятница",
+		"суббота"
+	],
+	"DAYS_OF_WEEK_ACCUSATIVE": [
+		"понедельник",
+		"вторник",
+		"среду",
+		"четверг",
+		"пятницу",
+		"субботу"
+	],
+	"USERS": [
+		{
+			"id": 12345679000000,
+			"username": "admin_username"
+		},
+		{
+			"id": 246800000000,
+			"username": "another_user"
+		}
+	],
+	"SCHEDULE_LINK": "https://www.mirea.ru/schedule/",
+	"UNIT": "Институт СТРАННЫХ РЕШЕНИЙ",
+	"INDEX_OF_LINE_WITH_GROUPS_NAMES": 1,
+	"GROUP": "ИАВБ-99-99"
+}
