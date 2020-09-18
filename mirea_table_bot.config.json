@@ -29,16 +29,6 @@
 		"пятницу",
 		"субботу"
 	],
-	"USERS": [
-		{
-			"id": 12345679000000,
-			"username": "admin_username"
-		},
-		{
-			"id": 246800000000,
-			"username": "another_user"
-		}
-	],
 	"SCHEDULE_LINK": "https://www.mirea.ru/schedule/",
 	"UNIT": "Институт СТРАННЫХ РЕШЕНИЙ",
 	"INDEX_OF_LINE_WITH_GROUPS_NAMES": 1,

@@ -21,7 +21,6 @@ const
  * @property {String[]} LESSON_TIMES
  * @property {String[]} DAYS_OF_WEEK
  * @property {String[]} DAYS_OF_WEEK_ACCUSATIVE
- * @property {{id: number, username: string}[]} USERS
  * @property {String} SCHEDULE_LINK
  * @property {String} UNIT
  * @property {Number} INDEX_OF_LINE_WITH_GROUPS_NAMES
@@ -37,151 +36,193 @@ const
 		LESSON_TIMES,
 		DAYS_OF_WEEK,
 		DAYS_OF_WEEK_ACCUSATIVE,
-		USERS,
 		SCHEDULE_LINK,
 		UNIT,
 		INDEX_OF_LINE_WITH_GROUPS_NAMES,
 		GROUP
 	} = CONFIG;
 
+/** @type {{id: number, username: string}[]} */
+const USERS = JSON.parse(fs.readFileSync("./mirea_table_bot.users.json"));
+
+
+
+/** @type {{[commandName: string]: { description: string, caller?: function, text?: string }}} */
 const COMMANDS = {
-	"table": /** @param {TelegramContext} ctx */ (ctx) => {
-		GetLinkToFile()
-			.then((link) => TelegramSend({
-				text: `<a href="${encodeURI(link)}">${TGE(link)}</a>`,
-				destination: ctx.chat.id,
-				buttons: Markup.inlineKeyboard([
-					Markup.urlButton("XLSX файл с расписанием", encodeURI(link))
-				])
-			}));
+	"today": {
+		description: "Сегодня",
+		caller: /** @param {TelegramContext} ctx */ (ctx) => {
+			const today = DAYS_OF_WEEK[GetDay() - 1];
 
 
-		if (ctx.chat.id === ADMIN_TELEGRAM_DATA.id) {
-			TelegramSendToAdmin("Updating Schedule because you are the admin!");
-			TimeoutFunction();
-		};
+			if (!today) {
+				TelegramSend({
+					text: "Сегодня неучебный день!",
+					destination: ctx.chat.id
+				});
+			} else {
+				const todayLayout = BuildDay(GetDay() - 1, GetWeek());
+
+				if (todayLayout) {
+					TelegramSend({
+						text: `Сегодня ${today}. Расписание:\n\n${todayLayout}`,
+						destination: ctx.chat.id
+					});
+				} else {
+					TelegramSend({
+						text: `Сегодня ${today}. Пар нет!`,
+						destination: ctx.chat.id
+					});
+				};
+			};
+		}
 	},
-	"today": /** @param {TelegramContext} ctx */ (ctx) => {
-		const today = DAYS_OF_WEEK[GetDay() - 1];
+	"tomorrow": {
+		description: "Завтра",
+		caller: /** @param {TelegramContext} ctx */ (ctx) => {
+			const tomorrow = DAYS_OF_WEEK[GetDay()];
 
 
-		if (!today) {
+			if (!tomorrow) {
+				TelegramSend({
+					text: "Завтра неучебный день!",
+					destination: ctx.chat.id
+				});
+			} else {
+				const tomorrowLayout = BuildDay(GetDay(), GetWeek() + (GetDay() === 0));
+
+				if (tomorrowLayout) {
+					TelegramSend({
+						text: `Завтра ${tomorrow}. Расписание:\n\n${tomorrowLayout}`,
+						destination: ctx.chat.id
+					});
+				} else {
+					TelegramSend({
+						text: `Завтра ${tomorrow}. Пар нет!`,
+						destination: ctx.chat.id
+					});
+				};
+			};
+		}
+	},
+	"twodays": {
+		description: "Сегодня и завтра",
+		caller: /** @param {TelegramContext} ctx */ (ctx) => {
+			const
+				today = DAYS_OF_WEEK[GetDay() - 1],
+				tomorrow = DAYS_OF_WEEK[GetDay()];
+
+			let replyText = "";
+
+			if (!today) {
+				replyText += "Сегодня неучебный день!";
+			} else {
+				const todayLayout = BuildDay(GetDay() - 1, GetWeek());
+
+				if (todayLayout) {
+					replyText += `Сегодня ${today}. Расписание:\n\n${todayLayout}`;
+				} else {
+					replyText += `Сегодня ${today}. Пар нет!`;
+				};
+			};
+
+
+			replyText += "\n\n~~~~~~\n\n";
+
+
+			if (!tomorrow) {
+				replyText += "Завтра неучебный день!";
+			} else {
+				const tomorrowLayout = BuildDay(GetDay(), GetWeek() + (GetDay() === 0));
+
+				if (tomorrowLayout) {
+					replyText += `Завтра ${tomorrow}. Расписание:\n\n${tomorrowLayout}`;
+				} else {
+					replyText += `Завтра ${tomorrow}. Пар нет!`;
+				};
+			};
+
+
 			TelegramSend({
-				text: "Сегодня неучебный день!",
+				text: replyText,
 				destination: ctx.chat.id
 			});
-		} else {
-			const todayLayout = BuildDay(GetDay() - 1, GetWeek());
-
-			if (todayLayout) {
-				TelegramSend({
-					text: `Сегодня ${today}. Расписание:\n\n${todayLayout}`,
-					destination: ctx.chat.id
-				});
-			} else {
-				TelegramSend({
-					text: `Сегодня ${today}. Пар нет!`,
-					destination: ctx.chat.id
-				});
-			};
-		};
+		}
 	},
-	"tomorrow": /** @param {TelegramContext} ctx */ (ctx) => {
-		const tomorrow = DAYS_OF_WEEK[GetDay()];
-
-
-		if (!tomorrow) {
+	"weekthis": {
+		description: "Текущая неделя",
+		caller: /** @param {TelegramContext} ctx */ (ctx) => {
 			TelegramSend({
-				text: "Завтра неучебный день!",
+				text: `Расписание на текущую неделю (№${GetWeek()}):\n\n${BuildWeek(GetWeek())}`,
 				destination: ctx.chat.id
 			});
-		} else {
-			const tomorrowLayout = BuildDay(GetDay(), GetWeek() + (GetDay() === 0));
+		}
+	},
+	"weeknext": {
+		description: "Следующая неделя",
+		caller: /** @param {TelegramContext} ctx */ (ctx) => {
+			TelegramSend({
+				text: `Расписание на следующую неделю (№${GetWeek() + 1}):\n\n${BuildWeek(GetWeek() + 1)}`,
+				destination: ctx.chat.id
+			});
+		}
+	},
+	"week3": {
+		description: "Текущая неделя + 2",
+		caller: /** @param {TelegramContext} ctx */ (ctx) => {
+			TelegramSend({
+				text: `Расписание на неделю №${GetWeek() + 2}:\n\n${BuildWeek(GetWeek() + 2)}`,
+				destination: ctx.chat.id
+			});
+		}
+	},
+	"week4": {
+		description: "Текущая неделя + 3",
+		caller: /** @param {TelegramContext} ctx */ (ctx) => {
+			TelegramSend({
+				text: `Расписание на неделю №${GetWeek() + 2}:\n\n${BuildWeek(GetWeek() + 3)}`,
+				destination: ctx.chat.id
+			});
+		}
+	},
+	"help": {
+		description: "Помощь",
+		text: `Я бот, который умеет делать многое с расписанием. Но только для группы ${GROUP}.
 
-			if (tomorrowLayout) {
-				TelegramSend({
-					text: `Завтра ${tomorrow}. Расписание:\n\n${tomorrowLayout}`,
-					destination: ctx.chat.id
-				});
-			} else {
-				TelegramSend({
-					text: `Завтра ${tomorrow}. Пар нет!`,
-					destination: ctx.chat.id
-				});
+Мои доступные команды – в списке команд! (Кнопка рядом с полем ввода)
+
+Также я буду присылать тебе
+• расписание на сегодня один раз утром
+• • <i>(только в те дни, когда есть пары)</i>
+• расписание на завтра два раза вечером
+• • <i>(только на те дни, когда есть пары)</i>`
+	},
+	"table": {
+		description: "Файл расписания",
+		caller: /** @param {TelegramContext} ctx */ (ctx) => {
+			GetLinkToFile()
+				.then((link) => TelegramSend({
+					text: `<a href="${encodeURI(link)}">${TGE(link)}</a>`,
+					destination: ctx.chat.id,
+					buttons: Markup.inlineKeyboard([
+						Markup.urlButton("XLSX файл с расписанием", encodeURI(link))
+					])
+				}));
+
+
+			if (ctx.chat.id === ADMIN_TELEGRAM_DATA.id) {
+				TelegramSendToAdmin("Updating Schedule because you are the admin!");
+				TimeoutFunction();
 			};
-		};
-	},
-	"twodays": /** @param {TelegramContext} ctx */ (ctx) => {
-		const
-			today = DAYS_OF_WEEK[GetDay() - 1],
-			tomorrow = DAYS_OF_WEEK[GetDay()];
-
-		let replyText = "";
-
-		if (!today) {
-			replyText += "Сегодня неучебный день!";
-		} else {
-			const todayLayout = BuildDay(GetDay() - 1, GetWeek());
-
-			if (todayLayout) {
-				replyText += `Сегодня ${today}. Расписание:\n\n${todayLayout}`;
-			} else {
-				replyText += `Сегодня ${today}. Пар нет!`;
-			};
-		};
-
-
-		replyText += "\n\n~~~~~~\n\n";
-
-
-		if (!tomorrow) {
-			replyText += "Завтра неучебный день!";
-		} else {
-			const tomorrowLayout = BuildDay(GetDay(), GetWeek() + (GetDay() === 0));
-
-			if (tomorrowLayout) {
-				replyText += `Завтра ${tomorrow}. Расписание:\n\n${tomorrowLayout}`;
-			} else {
-				replyText += `Завтра ${tomorrow}. Пар нет!`;
-			};
-		};
-
-
-		TelegramSend({
-			text: replyText,
-			destination: ctx.chat.id
-		});
-	},
-	"weekthis": /** @param {TelegramContext} ctx */ (ctx) => {
-		TelegramSend({
-			text: `Расписание на текущую неделю (№${GetWeek()}):\n\n${BuildWeek(GetWeek())}`,
-			destination: ctx.chat.id
-		});
-	},
-	"weeknext": /** @param {TelegramContext} ctx */ (ctx) => {
-		TelegramSend({
-			text: `Расписание на следующую неделю (№${GetWeek() + 1}):\n\n${BuildWeek(GetWeek() + 1)}`,
-			destination: ctx.chat.id
-		});
-	},
-	"week3": /** @param {TelegramContext} ctx */ (ctx) => {
-		TelegramSend({
-			text: `Расписание на неделю №${GetWeek() + 2}:\n\n${BuildWeek(GetWeek() + 2)}`,
-			destination: ctx.chat.id
-		});
-	},
-	"week4": /** @param {TelegramContext} ctx */ (ctx) => {
-		TelegramSend({
-			text: `Расписание на неделю №${GetWeek() + 2}:\n\n${BuildWeek(GetWeek() + 3)}`,
-			destination: ctx.chat.id
-		});
+		}
 	}
 };
 
-/**
- * @type {{[chatId: number]: number[]}}
- */
-const PREVIOUS_MESSAGES = {};
+const COMMANDS_ALIASES = {};
+Object.keys(COMMANDS).forEach((key) => {
+	const alias = COMMANDS[key].description;
+	COMMANDS_ALIASES[alias] = COMMANDS[key];
+});
 
 
 
@@ -252,13 +293,19 @@ const
  * @param {{text: String, destination: number, buttons?: Array.<Array.<{text: string, callback_data: string, url: string}>>}} messageData
  */
 const TelegramSend = (messageData) => {
+	const replyKeyboard = Markup.keyboard(
+		Chunkify(
+			Object.keys(COMMANDS).map((key) => Markup.button(COMMANDS[key].description)),
+			2
+		),
+		{ resize_keyboard: true}
+	);
+
+
 	telegram.sendMessage(messageData.destination, messageData.text, {
 		parse_mode: "HTML",
 		disable_web_page_preview: true,
-		reply_markup: messageData.buttons
-	}).then(/** @param {TelegramMessageObject} message */ (message) => {
-		if (!PREVIOUS_MESSAGES[message.chat.id]) PREVIOUS_MESSAGES[message.chat.id] = [];
-		PREVIOUS_MESSAGES[message.chat.id].push(message ? message.message_id : null);
+		reply_markup: messageData.buttons || replyKeyboard
 	}).catch((e) => console.error(e));
 };
 
@@ -289,13 +336,40 @@ const TGE = iStr => {
 		return TGE(iStr.toString());
 };
 
+
+
+
+
+
 // Move To Utils
+/**
+ * @param {String} iString
+ * @returns {String}
+ */
 const Capitalize = iString => {
 	if (!iString || typeof iString != "string") return iString;
 
 	return iString[0].toUpperCase() + iString.slice(1).toLowerCase();
 };
 
+/**
+ * @param {Array} iArray
+ * @param {Number} iChunkSize
+ * @returns {Array.<Array>}
+ */
+const Chunkify = (iArray, iChunkSize) => {
+	if (!iArray || !iChunkSize) return iArray;
+
+	const outArray = [];
+
+	iArray.forEach((elem, index) => {
+		let pasteIndex = Math.floor(index / iChunkSize);
+		if (!outArray[pasteIndex]) outArray.push([]);
+		outArray[pasteIndex].push(elem);
+	});
+
+	return outArray;
+};
 
 
 
@@ -305,16 +379,42 @@ const Capitalize = iString => {
 TOB.use(Sessions());
 
 TOB.start(/** @param {TelegramContext} ctx */ (ctx) => {
-	ctx.reply(`Я бот, который умеет делать многое с расписанием. Но только для группы ${GROUP}. Если у тебя работают комманды, то значит я буду автоматически отсылать тебе расписание.`);
+	let indexOfUser = USERS.findIndex((user) => user.id === ctx.chat.id);
+	
+
+	if (indexOfUser < 0) {
+		USERS.push({
+			id: ctx.chat.id,
+			username: ctx.chat.username || ctx.chat.first_name
+		});
+
+		fs.writeFile("./mirea_table_bot.users.json", JSON.stringify(USERS, false, "\t"), (e) => {
+			if (e) TelegramSendToAdmin(["Cannot write user into local .json file!", e]);
+		});
+	};
+	
+
+	TelegramSend({
+		text: COMMANDS["help"].text,
+		destination: ctx.chat.id
+	});
 });
 
 TOB.on("text", /** @param {TelegramContext} ctx */ (ctx) => {
 	const { chat } = ctx;
 
 
-	if (chat && chat["type"] === "private") {
-		if (!(USERS.map(user => user.id).includes(chat.id))) return false;
 
+	if (chat && chat["type"] === "private") {
+		if (chat.id === ADMIN_TELEGRAM_DATA.id) {
+			if (ctx.message && ctx.message.text === "/show_users") {
+				return TelegramSendToAdmin(`<b>Пользователя из процесса:</b>\n<pre>${JSON.stringify(USERS, false, "\t")}</pre>`);
+			};
+		};
+	};
+
+
+	if (chat && chat["type"] === "private") {
 		const { message } = ctx;
 		if (!message) return false;
 
@@ -322,26 +422,32 @@ TOB.on("text", /** @param {TelegramContext} ctx */ (ctx) => {
 		if (!text) return false;
 
 
-		ctx.deleteMessage(message.id);
-		if (PREVIOUS_MESSAGES[message.chat.id]) {
-			if (PREVIOUS_MESSAGES[message.chat.id] instanceof Array) {
-				PREVIOUS_MESSAGES[message.chat.id].forEach((messageId) => {
-					telegram.deleteMessage(message.chat.id, messageId).then(() => {}).catch(console.error);
+		ctx.deleteMessage(message.id).catch(console.warn);
+
+
+		if (COMMANDS_ALIASES[Capitalize(text.trim())]) {
+			if (typeof COMMANDS_ALIASES[Capitalize(text.trim())].caller == "function")
+				return COMMANDS_ALIASES[Capitalize(text.trim())].caller(ctx);
+			else if (typeof COMMANDS_ALIASES[Capitalize(text.trim())].text == "string")
+				return TelegramSend({
+					text: COMMANDS_ALIASES[Capitalize(text.trim())].text,
+					destination: ctx.chat.id
 				});
-			};
 		};
 
 
 		const commandMatch = text.match(/^\/([\w\d]+)(\@mirea_table_bot)?$/i);
 
 		if (commandMatch && commandMatch[1]) {
-			if (typeof COMMANDS[commandMatch[1]] == "function")
-				return COMMANDS[commandMatch[1]](ctx);
-			else if (typeof COMMANDS[commandMatch[1]] == "string")
-				return TelegramSend({
-					text: COMMANDS[commandMatch[1]],
-					destination: ctx.chat.id
-				});
+			if (COMMANDS[commandMatch[1]]) {
+				if (typeof COMMANDS[commandMatch[1]].caller == "function")
+					return COMMANDS[commandMatch[1]].caller(ctx);
+				else if (typeof COMMANDS[commandMatch[1]].text == "string")
+					return TelegramSend({
+						text: COMMANDS[commandMatch[1]].text,
+						destination: ctx.chat.id
+					});
+			};
 		};
 
 		return TelegramSend({
