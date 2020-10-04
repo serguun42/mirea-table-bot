@@ -180,7 +180,7 @@ const COMMANDS = {
 		description: "Текущая неделя + 3",
 		caller: /** @param {TelegramContext} ctx */ (ctx) => {
 			TelegramSend({
-				text: `Расписание на неделю №${GetWeek() + 2}:\n\n${BuildWeek(GetWeek() + 3)}`,
+				text: `Расписание на неделю №${GetWeek() + 3}:\n\n${BuildWeek(GetWeek() + 3)}`,
 				destination: ctx.chat.id
 			});
 		}
@@ -468,6 +468,7 @@ TOB.launch();
  * @property {string} type
  * @property {string} [tutor]
  * @property {string} [place]
+ * @property {string} [link]
  * 
  * 
  * @typedef {Option[]} Lesson
@@ -490,7 +491,7 @@ let SCHEDULE = [];
 /**
  * @returns {Number}
  */
-const GetWeek = () => Math.ceil((Date.now() + (!DEV) * 3 * HOUR - START_OF_WEEKS) / (7 * 24 * HOUR));
+const GetWeek = () => Math.ceil((Date.now() - START_OF_WEEKS) / (7 * 24 * HOUR));
 
 /**
  * @returns {Number}
@@ -511,7 +512,8 @@ const BuildOptionLayout = (iOption, iLessonPosition, iSkipTime = false) => {
 		+ `<b>${TGE(iOption.name)}</b>`
 		+ (iOption.type ? ` (${TGE(iOption.type)})` : "")
 		+ (iOption.tutor ? `\n<i>${TGE(iOption.tutor)}</i>` : "")
-		+ (iOption.place ? `${iOption.tutor ? ", " : "\n"}<i>${TGE(iOption.place)}</i>` : "")
+		+ (iOption.place ? `${iOption.tutor ? ", " : "\n"}<i>${TGE(iOption.place === "Д" ? "Дистанционно" : iOption.place)}</i>` : "")
+		+ (iOption.link ? `\n<a href="${encodeURI(iOption.link)}">Ссылка на пару</a>` : "")
 	);
 };
 
@@ -541,7 +543,12 @@ const BuildDay = (iNumberOfDayInWeek, iWeek) => {
 		day = SCHEDULE[iNumberOfDayInWeek],
 		lessons = day[iWeek % 2 ? "odd" : "even"];
 
-	return lessons.map((lesson, lessonPosition) => BuildOption(lesson, lessonPosition, iWeek)).join("\n\n").trim();
+	return lessons
+			.map((lesson, lessonPosition) => BuildOption(lesson, lessonPosition, iWeek))
+			.map((option) => option && option.trim ? option.trim() : option)
+			.filter((option) => !!option)
+			.join("\n\n")
+			.trim();
 };
 
 /**
@@ -660,7 +667,7 @@ const GetTablesFile = (iLinkToXLSXFile) => new Promise((resolve, reject) => {
 
 		const myGroupTable = tableData
 								.slice(INDEX_OF_LINE_WITH_GROUPS_NAMES + 2, INDEX_OF_LINE_WITH_GROUPS_NAMES + 2 + 72)
-								.map(row => row.slice(indexOfMyGroup, indexOfMyGroup + 4));
+								.map(row => row.slice(indexOfMyGroup, indexOfMyGroup + 5));
 
 
 		/** @type {Schedule} */
@@ -680,7 +687,8 @@ const GetTablesFile = (iLinkToXLSXFile) => new Promise((resolve, reject) => {
 				name: ParseLessonPartsAndOptions(lessonOption[0]),
 				type: ParseLessonPartsAndOptions(lessonOption[1]),
 				tutor: ParseLessonPartsAndOptions(lessonOption[2]),
-				place: ParseLessonPartsAndOptions(lessonOption[3])
+				place: ParseLessonPartsAndOptions(lessonOption[3]),
+				link: ParseLessonPartsAndOptions(lessonOption[4])
 			};
 
 			const formedLesson = [];
@@ -693,12 +701,29 @@ const GetTablesFile = (iLinkToXLSXFile) => new Promise((resolve, reject) => {
 					else
 						weeks = null;
 
+					if (!weeks) {
+						weeks = optionName.match(/^((\d+)\-(\d+))\sн.\s/);
+
+						if (weeks && weeks[1] && weeks[2] && weeks[3]) {
+							let weeksArr = [],
+								startingWeek = parseInt(weeks[2]),
+								endingWeek = parseInt(weeks[3]);
+
+							for (let i = startingWeek; i <= endingWeek; i += 2)
+								weeksArr.push(i);
+
+							weeks = weeksArr.join(",");
+						} else
+							weeks = null;
+					};
+
 					formedLesson.push({
 						weeks: weeks ? weeks.split(",").map(week => +week) : null,
-						name: weeks ? optionName.replace(/^([\d\,]+)\sн.\s/, "").trim() : optionName.trim(),
+						name: weeks ? optionName.replace(/^([\d\,]+)\sн.\s/, "").replace(/^((\d+)\-(\d+))\sн.\s/, "").trim() : optionName.trim(),
 						type: splittedLesson.type ? splittedLesson.type[optionIndex] || null : null,
 						tutor: splittedLesson.tutor ? splittedLesson.tutor[optionIndex] || null : null,
-						place: splittedLesson.place ? splittedLesson.place[optionIndex] || null : null
+						place: splittedLesson.place ? splittedLesson.place[optionIndex] || null : null,
+						link: splittedLesson.link ? splittedLesson.link[optionIndex] ? splittedLesson.link[optionIndex] : (splittedLesson.link[optionIndex - 1] || null) : null
 					});
 				});
 
