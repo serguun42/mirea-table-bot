@@ -539,9 +539,11 @@ const BuildOption = (iOptions, iLessonPosition, iWeek) => iOptions.filter((optio
  * @returns {String}
  */
 const BuildDay = (iNumberOfDayInWeek, iWeek) => {
-	const
-		day = SCHEDULE[iNumberOfDayInWeek],
-		lessons = day[iWeek % 2 ? "odd" : "even"];
+	const day = SCHEDULE[iNumberOfDayInWeek];
+	if (!day) return "";
+
+	const lessons = day[iWeek % 2 ? "odd" : "even"];
+	if (!lessons) return "";
 
 	return lessons
 			.map((lesson, lessonPosition) => BuildOption(lesson, lessonPosition, iWeek))
