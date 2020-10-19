@@ -45,6 +45,9 @@ const
 /** @type {{id: number, username: string}[]} */
 const USERS = JSON.parse(fs.readFileSync("./mirea_table_bot.users.json"));
 
+/** @type {{[typo: string]: string}} */
+const FIXES = JSON.parse(fs.readFileSync("./mirea_table_bot.fixes.json"));
+
 
 
 /** @type {{[commandName: string]: { description: string, caller?: function, text?: string }}} */
@@ -605,6 +608,11 @@ const GetTomorrow = () => {
  */
 const ParseLessonPartsAndOptions = iRawComplexLesson => {
 	if (!iRawComplexLesson) return null;
+	if (typeof iRawComplexLesson !== "string") return null;
+
+	Object.keys(FIXES).forEach((regexpRaw) => {
+		iRawComplexLesson = iRawComplexLesson.replace(new RegExp(regexpRaw, "g"), FIXES[regexpRaw]);
+	});
 	
 	return iRawComplexLesson.replace(/\r/g, "").split("\n").filter(i => !!i);
 };
