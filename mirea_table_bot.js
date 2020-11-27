@@ -309,7 +309,34 @@ const TelegramSend = (messageData) => {
 		parse_mode: "HTML",
 		disable_web_page_preview: true,
 		reply_markup: messageData.buttons || replyKeyboard
-	}).catch((e) => console.error(e));
+	}).catch((e) => {
+		if (e.code === 403) {
+			const foundUser = USERS.find((user) => user.id === messageData.destination);
+
+			if (foundUser) {
+				console.log(new Date());
+				console.log(`Deleting user with id ${messageData.destination}`, JSON.stringify(foundUser, false, "\t"));
+
+				const indexOfFoundUser = USERS.findIndex((user) => user.id === messageData.destination);
+
+				if (indexOfFoundUser) {
+					USERS.splice(indexOfFoundUser, 1);
+					fs.writeFile("./mirea_table_bot.users.json", JSON.stringify(USERS, false, "\t"), (e) => {
+						if (e) TelegramSendToAdmin(["Cannot write user into local .json file!", e]);
+					});
+					console.log(`User with id ${messageData.destination} successfly deleted. They'd had index ${indexOfFoundUser} in whole users' list but gone now.`, JSON.stringify(foundUser, false, "\t"))
+				} else {
+					console.log(`Could not deleting user with id ${messageData.destination} because of critical bug with finding proper user. Go see TelegramSend() function.`);
+				};
+			} else {
+				console.error(new Data());
+				console.error(`Cannot remove user with id ${messageData.destination} because they're not in out users' list`);
+				console.error(e);
+			};
+		} else {
+			console.error(e);
+		};
+	});
 };
 
 /**
@@ -318,8 +345,13 @@ const TelegramSend = (messageData) => {
 const TelegramSendToAdmin = (message) => {
 	if (!message) return;
 
-	if (message instanceof Array)
-		console.error(message);
+
+	if (message instanceof Array) {
+		console.error(new Date().toISOString());
+
+		message.forEach((err) => console.error(err));
+	};
+
 
 	telegram.sendMessage(ADMIN_TELEGRAM_DATA.id, message instanceof Array ? message.join("\n") : message, {
 		parse_mode: "HTML",
@@ -756,8 +788,6 @@ const GetTablesFile = (iLinkToXLSXFile) => new Promise((resolve, reject) => {
 
 const ScheduledProcedure = () => GetLinkToFile().then((linkToXLSXFile) => GetTablesFile(linkToXLSXFile));
 const TimeoutFunction = () => ScheduledProcedure().catch((e) => {
-	if (DEV) console.warn(e);
-
 	TelegramSendToAdmin([`Error on getting file.xlsx`, e]);
 });
 
