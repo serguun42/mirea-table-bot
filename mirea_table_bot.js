@@ -7,10 +7,8 @@ const
 	xlsx = require("node-xlsx").default,
 	NodeFetch = require("node-fetch"),
 	cron = require("node-cron"),
-	Telegraf = require("telegraf"),
-	Sessions = require("telegraf/session"),
-	Telegram = require("telegraf/telegram"),
-	Markup = require("telegraf/markup");
+	Telegraf = require("telegraf");
+
 
 
 /**
@@ -22,13 +20,15 @@ const
  * @property {String[]} DAYS_OF_WEEK
  * @property {String[]} DAYS_OF_WEEK_ACCUSATIVE
  * @property {String} SCHEDULE_LINK
+ * @property {String} SCHEDULE_PAGE_COOKIE
  * @property {String} UNIT
  * @property {Number} INDEX_OF_LINE_WITH_GROUPS_NAMES
  * @property {String} GROUP
+ * @property {Boolean} SESSION
  */
 /** @type {ConfigFile} */
 const
-	CONFIG = JSON.parse(fs.readFileSync("./mirea_table_bot.config.json")),
+	CONFIG = require("./mirea_table_bot.config.json"),
 	{
 		TELEGRAM_BOT_TOKEN,
 		ADMIN_TELEGRAM_DATA,
@@ -37,16 +37,18 @@ const
 		DAYS_OF_WEEK,
 		DAYS_OF_WEEK_ACCUSATIVE,
 		SCHEDULE_LINK,
+		SCHEDULE_PAGE_COOKIE,
 		UNIT,
 		INDEX_OF_LINE_WITH_GROUPS_NAMES,
-		GROUP
+		GROUP,
+		SESSION
 	} = CONFIG;
 
 /** @type {{id: number, username: string}[]} */
-const USERS = JSON.parse(fs.readFileSync("./mirea_table_bot.users.json"));
+const USERS = require("./mirea_table_bot.users.json");
 
 /** @type {{[typo: string]: string}} */
-const FIXES = JSON.parse(fs.readFileSync("./mirea_table_bot.fixes.json"));
+const FIXES = require("./mirea_table_bot.fixes.json");
 
 
 
@@ -207,9 +209,12 @@ const COMMANDS = {
 				.then((link) => TelegramSend({
 					text: `<a href="${encodeURI(link)}">${TGE(link)}</a>`,
 					destination: ctx.chat.id,
-					buttons: Markup.inlineKeyboard([
-						Markup.urlButton("XLSX файл с расписанием", encodeURI(link))
-					])
+					buttons: Telegraf.Markup.inlineKeyboard([
+						{
+							text: "XLSX файл с расписанием",
+							url: encodeURI(link)
+						}
+					]).reply_markup
 				}));
 
 
@@ -228,10 +233,9 @@ Object.keys(COMMANDS).forEach((key) => {
 });
 
 
-
-const
-	telegram = new Telegram(TELEGRAM_BOT_TOKEN),
-	TOB = new Telegraf(TELEGRAM_BOT_TOKEN);
+/** @type {import("telegraf").Telegraf} */
+const BOT = new Telegraf.Telegraf(TELEGRAM_BOT_TOKEN);
+const telegram = BOT.telegram;
 
 
 
@@ -272,7 +276,6 @@ const
  * @property {TelegramMessageObject} message
  * 
  * @typedef {Object} TelegramContext
- * @property {Object} telegram 
  * @property {String} updateType 
  * @property {Object} [updateSubTypes] 
  * @property {TelegramMessageObject} [message] 
@@ -293,16 +296,12 @@ const
  * @property {Boolean} webhookReply
  */
 /**
- * @param {{text: String, destination: number, buttons?: Array.<Array.<{text: string, callback_data: string, url: string}>>}} messageData
+ * @param {{text: String, destination: number, buttons?: {text: string, callback_data: string, url: string}[][]}} messageData
  */
 const TelegramSend = (messageData) => {
-	const replyKeyboard = Markup.keyboard(
-		Chunkify(
-			Object.keys(COMMANDS).map((key) => Markup.button(COMMANDS[key].description)),
-			2
-		),
-		{ resize_keyboard: true}
-	);
+	const replyKeyboard = Telegraf.Markup.keyboard(
+		Chunkify(Object.keys(COMMANDS).map((key) => ({ text: COMMANDS[key].description })), 2)
+	).resize(true).reply_markup;
 
 
 	telegram.sendMessage(messageData.destination, messageData.text, {
@@ -411,9 +410,7 @@ const Chunkify = (iArray, iChunkSize) => {
 
 
 
-TOB.use(Sessions());
-
-TOB.start(/** @param {TelegramContext} ctx */ (ctx) => {
+BOT.start(/** @param {import("telegraf").Context} ctx */ (ctx) => {
 	let indexOfUser = USERS.findIndex((user) => user.id === ctx.chat.id);
 	
 
@@ -435,7 +432,7 @@ TOB.start(/** @param {TelegramContext} ctx */ (ctx) => {
 	});
 });
 
-TOB.on("text", /** @param {TelegramContext} ctx */ (ctx) => {
+BOT.on("text", /** @param {TelegramContext} ctx */ (ctx) => {
 	const { chat } = ctx;
 
 
@@ -492,7 +489,7 @@ TOB.on("text", /** @param {TelegramContext} ctx */ (ctx) => {
 	};
 });
 
-TOB.launch();
+BOT.launch();
 
 
 
@@ -669,7 +666,11 @@ const GetLinkToFile = () => new Promise((resolve, reject) => {
 			if (found) return;
 			found = true;
 
-			const linkMatch = blockWithUnit.match(/<a class="uk-link-toggle" href="([^"]+)" target="_blank">/);
+			const blockWithUnitSplitted = blockWithUnit.split("Расписание занятий");
+
+			if (!blockWithUnitSplitted[1]) return Promise.reject("No link to xlsx file!");
+
+			const linkMatch = blockWithUnitSplitted[1].match(/<a class="uk-link-toggle" href="([^"]+)" target="_blank">/);
 			if (!linkMatch || !linkMatch[1]) return Promise.reject("No link to xlsx file!");
 
 
@@ -784,43 +785,58 @@ const GetTablesFile = (iLinkToXLSXFile) => new Promise((resolve, reject) => {
 	}).catch((e) => reject(e));
 });
 
-
-
-const ScheduledProcedure = () => GetLinkToFile().then((linkToXLSXFile) => GetTablesFile(linkToXLSXFile));
-const TimeoutFunction = () => ScheduledProcedure().catch((e) => {
-	TelegramSendToAdmin([`Error on getting file.xlsx`, e]);
+/**
+ * @returns {Promise.<String, Error>}
+ */
+const GetLinksToSessionFiles = () => new Promise((resolve, reject) => {
+	// ReDo
+	SCHEDULE = [];
 });
+
+
+
+const ScheduledProcedure = () => {
+	if (SESSION)
+		return GetLinksToSessionFiles();
+	else
+		return GetLinkToFile()
+			.then((linkToXLSXFile) => GetTablesFile(linkToXLSXFile));
+};
+
+const TimeoutFunction = () => ScheduledProcedure().catch((e) => TelegramSendToAdmin([`Error on getting file.xlsx`, e]));
+
 
 
 TimeoutFunction();
 
-setInterval(() => TimeoutFunction(), HOUR);
+setInterval(() => TimeoutFunction(), SESSION ? HOUR * 3 : HOUR);
 
 
 
+if (!DEV) {
+	cron.schedule("0 4 * * *", () => {
+		const today = GetToday();
 
-cron.schedule("0 4 * * *", () => {
-	const today = GetToday();
-
-	if (today) {
-		USERS.forEach((user) => {
-			TelegramSend({
-				text: `Сегодня ${today.nameOfDay}. Расписание:\n\n${today.layout}`,
-				destination: user.id
+		if (today) {
+			USERS.forEach((user) => {
+				TelegramSend({
+					text: `Сегодня ${today.nameOfDay}. Расписание:\n\n${today.layout}`,
+					destination: user.id
+				});
 			});
-		});
-	};
-});
+		};
+	});
 
-cron.schedule("0 16,19 * * *", () => {
-	const tomorrow = GetTomorrow();
+	cron.schedule("0 16,19 * * *", () => {
+		const tomorrow = GetTomorrow();
 
-	if (tomorrow) {
-		USERS.forEach((user) => {
-			TelegramSend({
-				text: `Завтра ${tomorrow.nameOfDay}. Расписание:\n\n${tomorrow.layout}`,
-				destination: user.id
+		if (tomorrow) {
+			USERS.forEach((user) => {
+				TelegramSend({
+					text: `Завтра ${tomorrow.nameOfDay}. Расписание:\n\n${tomorrow.layout}`,
+					destination: user.id
+				});
 			});
-		});
-	};
-});
+		};
+	});
+};

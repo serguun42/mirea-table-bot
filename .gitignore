@@ -1,0 +1,9 @@
+mailing.js
+*.png
+*.psd
+package-lock.json
+/out/
+node_modules/
+.vscode
+mailed.txt
+jsdoc-to-ts.bat

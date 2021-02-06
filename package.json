@@ -1,0 +1,17 @@
+{
+  "name": "mirea-table-bot",
+  "version": "1.0.0",
+  "description": "Telegram Bot for MIREA's Schedule",
+  "main": "index.js",
+  "scripts": {
+    "launch": "node ./mirea_table_bot.js"
+  },
+  "author": "serguun42",
+  "license": "MIT",
+  "dependencies": {
+    "node-cron": "^2.0.3",
+    "node-fetch": "^2.6.1",
+    "node-xlsx": "^0.15.0",
+    "telegraf": "^4.0.2"
+  }
+}
