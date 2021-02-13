@@ -1,42 +1,18 @@
 [
 	{
 		"id": 12345679000000,
-		"username": "admin_username",
-		"group": "ИАБВ-99-99",
-		"cats": true,
-		"last_cat_photo": "",
-		"morning": true,
-		"evening": true,
-		"late_evening": true
+		"username": "admin_username"
 	},
 	{
 		"id": 246800000000,
-		"username": "another_user",
-		"group": "ИАБВ-99-99",
-		"cats": false,
-		"last_cat_photo": "",
-		"morning": true,
-		"evening": true,
-		"late_evening": true
+		"username": "another_user"
 	},
 	{
 		"id": 246800000001,
-		"username": "third_user",
-		"group": "ИАБВ-99-99",
-		"cats": true,
-		"last_cat_photo": "",
-		"morning": true,
-		"evening": true,
-		"late_evening": true
+		"username": "third_user"
 	},
 	{
 		"id": 246800000002,
-		"username": "fourth_user",
-		"group": "ИАБВ-99-99",
-		"cats": false,
-		"last_cat_photo": "",
-		"morning": false,
-		"evening": false,
-		"late_evening": false
+		"username": "fourth_user"
 	}
 ]
