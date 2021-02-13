@@ -30,7 +30,12 @@
 		"субботу"
 	],
 	"SCHEDULE_LINK": "https://www.mirea.ru/schedule/",
-	"UNIT": "Институт СТРАННЫХ РЕШЕНИЙ",
+	"UNIT": "Институт ИНТЕРЕСНЫХ РЕШЕНИЙ",
 	"INDEX_OF_LINE_WITH_GROUPS_NAMES": 1,
-	"GROUP": "ИАВБ-99-99"
+	"GROUP": "ИАВБ-99-99",
+	"CATS": {
+		"ENABLED": true,
+		"FOLDER": "./cats/"
+	},
+	"SESSION": false
 }
