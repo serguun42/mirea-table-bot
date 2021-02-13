@@ -1,9 +1,6 @@
-mailing.js
-*.png
-*.psd
-package-lock.json
-/out/
-node_modules/
 .vscode
-mailed.txt
-jsdoc-to-ts.bat
+/node_modules/
+package-lock.json
+
+/out/
+/local-stuff/

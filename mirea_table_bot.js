@@ -1,5 +1,9 @@
 const
+	path = require("path"),
 	fs = require("fs"),
+	util = require("util"),
+	fsWriteFile = util.promisify(fs.writeFile),
+	fsReadDir = util.promisify(fs.readdir),
 	DEV = require("os").platform() === "win32" || process.argv[2] === "DEV",
 	SECOND = 1e3,
 	MINUTE = SECOND * 60,
@@ -11,6 +15,12 @@ const
 
 
 
+
+/**
+ * @typedef {Object} CatsConfig
+ * @property {Boolean} ENABLED
+ * @property {String} FOLDER
+ */
 /**
  * @typedef {Object} ConfigFile
  * @property {String} TELEGRAM_BOT_TOKEN
@@ -18,33 +28,43 @@ const
  * @property {Number} START_OF_WEEKS
  * @property {String[]} LESSON_TIMES
  * @property {String[]} DAYS_OF_WEEK
- * @property {String[]} DAYS_OF_WEEK_ACCUSATIVE
+ * @property {{"morning": String, "evening": String, "late_evening": String}} LABELS_FOR_TIMES_OF_DAY
  * @property {String} SCHEDULE_LINK
- * @property {String} SCHEDULE_PAGE_COOKIE
  * @property {String} UNIT
  * @property {Number} INDEX_OF_LINE_WITH_GROUPS_NAMES
  * @property {String} GROUP
+ * @property {CatsConfig} CATS
  * @property {Boolean} SESSION
  */
 /** @type {ConfigFile} */
-const
-	CONFIG = require("./mirea_table_bot.config.json"),
-	{
-		TELEGRAM_BOT_TOKEN,
-		ADMIN_TELEGRAM_DATA,
-		START_OF_WEEKS,
-		LESSON_TIMES,
-		DAYS_OF_WEEK,
-		DAYS_OF_WEEK_ACCUSATIVE,
-		SCHEDULE_LINK,
-		SCHEDULE_PAGE_COOKIE,
-		UNIT,
-		INDEX_OF_LINE_WITH_GROUPS_NAMES,
-		GROUP,
-		SESSION
-	} = CONFIG;
+const {
+	TELEGRAM_BOT_TOKEN,
+	ADMIN_TELEGRAM_DATA,
+	START_OF_WEEKS,
+	LESSON_TIMES,
+	DAYS_OF_WEEK,
+	LABELS_FOR_TIMES_OF_DAY,
+	SCHEDULE_LINK,
+	UNIT,
+	INDEX_OF_LINE_WITH_GROUPS_NAMES,
+	GROUP,
+	CATS,
+	SESSION
+} = require("./mirea_table_bot.config.json");
 
-/** @type {{id: number, username: string}[]} */
+/**
+ * @typedef {Object} User
+ * @property {Number} id
+ * @property {String} username
+ * @property {String} group
+ * @property {Boolean} waitingForTextForSettings
+ * @property {Boolean} cats
+ * @property {String} last_cat_photo
+ * @property {Boolean} morning
+ * @property {Boolean} evening
+ * @property {Boolean} late_evening
+ */
+/** @type {User[]} */
 const USERS = require("./mirea_table_bot.users.json");
 
 /** @type {{[typo: string]: string}} */
@@ -52,11 +72,42 @@ const FIXES = require("./mirea_table_bot.fixes.json");
 
 
 
-/** @type {{[commandName: string]: { description: string, caller?: function, text?: string }}} */
+
+
+/**
+ * @param {import("telegraf").Context} ctx
+ * @returns {Promise<User>}
+ */
+const GettingUserWrapper = (ctx) => new Promise((resolve) => {
+	const { chat, from } = ctx;
+
+	const foundUser = USERS.find((user) => user.id === from.id);
+
+	if (!foundUser) {
+		TelegramSend({
+			text: "Произошла ошибка. Пожалуйста, выполните команду /start",
+			destination: chat.id,
+		});
+
+		return reject();
+	} else {
+		resolve(foundUser);
+	};
+});
+
+/**
+ * @callback ButtonCommandCaller
+ * @param {import("telegraf").Context} ctx
+ * @returns {void}
+ */
+/**
+ * @type {{[commandName: string]: { description: String, caller: ButtonCommandCaller } | { description: String, text: String }}}
+ */
 const COMMANDS = {
 	"today": {
 		description: "Сегодня",
-		caller: /** @param {TelegramContext} ctx */ (ctx) => {
+		/** @type {ButtonCommandCaller} */
+		caller: (ctx) => {
 			const today = DAYS_OF_WEEK[GetDay() - 1];
 
 
@@ -84,7 +135,8 @@ const COMMANDS = {
 	},
 	"tomorrow": {
 		description: "Завтра",
-		caller: /** @param {TelegramContext} ctx */ (ctx) => {
+		/** @type {ButtonCommandCaller} */
+		caller: (ctx) => {
 			const tomorrow = DAYS_OF_WEEK[GetDay()];
 
 
@@ -110,53 +162,10 @@ const COMMANDS = {
 			};
 		}
 	},
-	"twodays": {
-		description: "Сегодня и завтра",
-		caller: /** @param {TelegramContext} ctx */ (ctx) => {
-			const
-				today = DAYS_OF_WEEK[GetDay() - 1],
-				tomorrow = DAYS_OF_WEEK[GetDay()];
-
-			let replyText = "";
-
-			if (!today) {
-				replyText += "Сегодня неучебный день!";
-			} else {
-				const todayLayout = BuildDay(GetDay() - 1, GetWeek());
-
-				if (todayLayout) {
-					replyText += `Сегодня ${today}. Расписание:\n\n${todayLayout}`;
-				} else {
-					replyText += `Сегодня ${today}. Пар нет!`;
-				};
-			};
-
-
-			replyText += "\n\n~~~~~~\n\n";
-
-
-			if (!tomorrow) {
-				replyText += "Завтра неучебный день!";
-			} else {
-				const tomorrowLayout = BuildDay(GetDay(), GetWeek() + (GetDay() === 0));
-
-				if (tomorrowLayout) {
-					replyText += `Завтра ${tomorrow}. Расписание:\n\n${tomorrowLayout}`;
-				} else {
-					replyText += `Завтра ${tomorrow}. Пар нет!`;
-				};
-			};
-
-
-			TelegramSend({
-				text: replyText,
-				destination: ctx.chat.id
-			});
-		}
-	},
 	"weekthis": {
 		description: "Текущая неделя",
-		caller: /** @param {TelegramContext} ctx */ (ctx) => {
+		/** @type {ButtonCommandCaller} */
+		caller: (ctx) => {
 			TelegramSend({
 				text: `Расписание на текущую неделю (№${GetWeek()}):\n\n${BuildWeek(GetWeek())}`,
 				destination: ctx.chat.id
@@ -165,7 +174,8 @@ const COMMANDS = {
 	},
 	"weeknext": {
 		description: "Следующая неделя",
-		caller: /** @param {TelegramContext} ctx */ (ctx) => {
+		/** @type {ButtonCommandCaller} */
+		caller: (ctx) => {
 			TelegramSend({
 				text: `Расписание на следующую неделю (№${GetWeek() + 1}):\n\n${BuildWeek(GetWeek() + 1)}`,
 				destination: ctx.chat.id
@@ -174,7 +184,8 @@ const COMMANDS = {
 	},
 	"week3": {
 		description: "Текущая неделя + 2",
-		caller: /** @param {TelegramContext} ctx */ (ctx) => {
+		/** @type {ButtonCommandCaller} */
+		caller: (ctx) => {
 			TelegramSend({
 				text: `Расписание на неделю №${GetWeek() + 2}:\n\n${BuildWeek(GetWeek() + 2)}`,
 				destination: ctx.chat.id
@@ -183,28 +194,89 @@ const COMMANDS = {
 	},
 	"week4": {
 		description: "Текущая неделя + 3",
-		caller: /** @param {TelegramContext} ctx */ (ctx) => {
+		/** @type {ButtonCommandCaller} */
+		caller: (ctx) => {
 			TelegramSend({
 				text: `Расписание на неделю №${GetWeek() + 3}:\n\n${BuildWeek(GetWeek() + 3)}`,
 				destination: ctx.chat.id
 			});
 		}
 	},
-	"help": {
-		description: "Помощь",
-		text: `Я бот, который умеет делать многое с расписанием. Но только для группы ${GROUP}.
+	"settings": {
+		description: "⚙ Настройки",
+		/** @type {ButtonCommandCaller} */
+		caller: (ctx) => {
+			const { chat, from } = ctx;
 
-Мои доступные команды – в списке команд! (Кнопка рядом с полем ввода)
+			const foundUser = USERS.find((user) => user.id === from.id);
+
+			if (!foundUser) return TelegramSend({
+				text: "Произошла ошибка. Пожалуйста, выполните команду /start",
+				destination: chat.id,
+			});
+
+			foundUser.waitingForTextForSettings = true;
+
+
+			TelegramSend({
+				text: `Вы можете настроить:
+
+🔹 Присылать ли расписание на текущий день один раз утром в 7:00.
+🔸🔸 <b>(только в те дни, когда есть пары)</b>
+
+🔹 Присылать ли расписание на следующий день в 19:00.
+🔸🔸 <b>(только на те дни, когда есть пары)</b>
+
+🔹 Присылать ли расписание на следующий день в 22:00.
+🔸🔸 <b>(только на те дни, когда есть пары)</b>
+
+🔹 Присылать ли котиков 🐱 по утрам в дни вместе с расписанием, когда есть семинары или лабы.`,
+				destination: chat.id,
+				buttons: Telegraf.Markup.keyboard(
+					SETTINGS_COMMANDS.map((settingCommand) =>
+						[({text: settingCommand.text(foundUser)})]
+					)
+				).reply_markup
+			});
+		}
+	},
+	"map": {
+		description: "🗺 Карта",
+		/** @type {ButtonCommandCaller} */
+		caller: (ctx) => {
+			TelegramSend({
+				text: "Карта на botpage.ru/map",
+				destination: ctx.chat.id,
+				buttons: Telegraf.Markup.inlineKeyboard([
+					{
+						text: "🗺 Карта",
+						url: "http://botpage.ru/map/"
+					}
+				]).reply_markup
+			});
+		}
+	},
+	"help": {
+		description: "❓ Помощь",
+		text: `Я бот, который умеет делать многое с расписанием. Но <b>пока</b> только для группы <b>${GROUP}</b>.
+
+Мои доступные команды – в списке команд! (Кнопка «/» или «🎲» рядом с полем ввода)
 
 Также я буду присылать тебе
-• расписание на сегодня один раз утром
-• • <i>(только в те дни, когда есть пары)</i>
-• расписание на завтра два раза вечером
-• • <i>(только на те дни, когда есть пары)</i>`
+🔹 расписание на текущий день один раз утром
+🔸🔸 <b>(только в те дни, когда есть пары)</b>
+
+🔹 расписание на следующий день два раза вечером
+🔸🔸 <b>(только на те дни, когда есть пары)</b>
+
+🔹 А ещё я могу отправлять котиков 🐱 по утрам в дни, когда есть семинары или лабы.
+
+В общем, смотри настройки (/settings) и помощь (/help), если надо 🧐`
 	},
 	"table": {
-		description: "Файл расписания",
-		caller: /** @param {TelegramContext} ctx */ (ctx) => {
+		description: "📋 Файл расписания",
+		/** @type {ButtonCommandCaller} */
+		caller: (ctx) => {
 			GetLinkToFile()
 				.then((link) => TelegramSend({
 					text: `<a href="${encodeURI(link)}">${TGE(link)}</a>`,
@@ -226,9 +298,110 @@ const COMMANDS = {
 	}
 };
 
+/**
+ * @callback SettingsCommandButtonTextSetter
+ * @param {User} foundUser
+ * @returns {String}
+ */
+/**
+ * @type {{text: SettingsCommandButtonTextSetter, regexp: RegExp, caller: ButtonCommandCaller}[]}
+ */
+const SETTINGS_COMMANDS = [
+	{
+		/** @type {SettingsCommandButtonTextSetter} */
+		text: (foundUser) => `👈 Назад`,
+		regexp: /👈 Назад/i,
+		/** @type {ButtonCommandCaller} */
+		caller: (ctx) => GettingUserWrapper(ctx).then((foundUser) => {
+			foundUser.waitingForTextForSettings = false;
+
+			TelegramSend({
+				text: "Настройки закрыты (и, естественно, применены ✅)",
+				destination: ctx.chat.id,
+			});
+		}).catch(console.warn)
+	},
+	{
+		/** @type {SettingsCommandButtonTextSetter} */
+		text: (foundUser) => `🕖 Рассылка утром – ${foundUser.morning ? "включена" : "выключена"}`,
+		regexp: /🕖 Рассылка утром – в(ы)?ключена/i,
+		/** @type {ButtonCommandCaller} */
+		caller: (ctx) => GettingUserWrapper(ctx).then((foundUser) => {
+			foundUser.morning = !foundUser.morning;
+
+			TelegramSend({
+				text: `🕖 Рассылка утром – ${foundUser.morning ? "включена" : "выключена"}`,
+				destination: ctx.chat.id,
+				buttons: Telegraf.Markup.keyboard(
+					SETTINGS_COMMANDS.map((settingCommand) =>
+						[({text: settingCommand.text(foundUser)})]
+					)
+				).reply_markup
+			});
+		}).catch(console.warn)
+	},
+	{
+		/** @type {SettingsCommandButtonTextSetter} */
+		text: (foundUser) => `🕖 Рассылка вечером – ${foundUser.evening ? "включена" : "выключена"}`,
+		regexp: /🕖 Рассылка вечером – в(ы)?ключена/i,
+		/** @type {ButtonCommandCaller} */
+		caller: (ctx) => GettingUserWrapper(ctx).then((foundUser) => {
+			foundUser.evening = !foundUser.evening;
+
+			TelegramSend({
+				text: `🕖 Рассылка вечером – ${foundUser.evening ? "включена" : "выключена"}`,
+				destination: ctx.chat.id,
+				buttons: Telegraf.Markup.keyboard(
+					SETTINGS_COMMANDS.map((settingCommand) =>
+						[({text: settingCommand.text(foundUser)})]
+					)
+				).reply_markup
+			});
+		}).catch(console.warn)
+	},
+	{
+		/** @type {SettingsCommandButtonTextSetter} */
+		text: (foundUser) => `🕙 Рассылка поздним вечером – ${foundUser.late_evening ? "включена" : "выключена"}`,
+		regexp: /🕙 Рассылка поздним вечером – в(ы)?ключена/i,
+		/** @type {ButtonCommandCaller} */
+		caller: (ctx) => GettingUserWrapper(ctx).then((foundUser) => {
+			foundUser.late_evening = !foundUser.late_evening;
+
+			TelegramSend({
+				text: `🕖 Рассылка поздним вечером – ${foundUser.late_evening ? "включена" : "выключена"}`,
+				destination: ctx.chat.id,
+				buttons: Telegraf.Markup.keyboard(
+					SETTINGS_COMMANDS.map((settingCommand) =>
+						[({text: settingCommand.text(foundUser)})]
+					)
+				).reply_markup
+			});
+		}).catch(console.warn)
+	},
+	{
+		/** @type {SettingsCommandButtonTextSetter} */
+		text: (foundUser) => `🐱 Котики – ${foundUser.cats ? "включены" : "выключены"}`,
+		regexp: /🐱 Котики – в(ы)?ключены/i,
+		/** @type {ButtonCommandCaller} */
+		caller: (ctx) => GettingUserWrapper(ctx).then((foundUser) => {
+			foundUser.cats = !foundUser.cats;
+
+			TelegramSend({
+				text: `🐱 Котики – ${foundUser.cats ? "включены" : "выключены"}`,
+				destination: ctx.chat.id,
+				buttons: Telegraf.Markup.keyboard(
+					SETTINGS_COMMANDS.map((settingCommand) =>
+						[({text: settingCommand.text(foundUser)})]
+					)
+				).reply_markup
+			});
+		}).catch(console.warn)
+	}
+];
+
 const COMMANDS_ALIASES = {};
 Object.keys(COMMANDS).forEach((key) => {
-	const alias = COMMANDS[key].description;
+	const alias = COMMANDS[key].description.replace(/[^\w\dа-я]+/gi, "");
 	COMMANDS_ALIASES[alias] = COMMANDS[key];
 });
 
@@ -239,64 +412,15 @@ const telegram = BOT.telegram;
 
 
 
+
 /**
- * @typedef {Object} TelegramFromObject
- * @property {Number} id
- * @property {String} first_name
- * @property {String} username
- * @property {Boolean} is_bot
- * @property {String} language_code
- * 
- * @typedef {Object} TelegramChatObject
- * @property {Number} id
- * @property {String} title
- * @property {String} type
- * 
- * @typedef {Object} TelegramPhotoObj
- * @property {String} file_id
- * @property {String} file_unique_id
- * @property {Number} file_size
- * @property {Number} width
- * @property {Number} height
- * 
- * @typedef {Object} TelegramMessageObject
- * @property {Number} message_id
+ * @typedef {Object} SendingMessageType
+ * @property {Number} destination
  * @property {String} text
- * @property {TelegramFromObject} from
- * @property {TelegramChatObject} chat
- * @property {Number} date
- * @property {Array.<{offset: Number, length: Number, type: String}>} [entities]
- * @property {TelegramPhotoObj[]} [photo]
- * @property {TelegramMessageObject} [reply_to_message]
- * @property {{inline_keyboard: Array.<Array.<{text: string, callback_data: string, url: string}>>}} [reply_markup]
- * @property {String} [caption]
+ * @property {{text: string, callback_data: string, url: string}[][]} [buttons]
+ * @property {String} [photo]
  * 
- * @typedef {Object} TelegramUpdateObject
- * @property {Number} update_id
- * @property {TelegramMessageObject} message
- * 
- * @typedef {Object} TelegramContext
- * @property {String} updateType 
- * @property {Object} [updateSubTypes] 
- * @property {TelegramMessageObject} [message] 
- * @property {Object} [editedMessage] 
- * @property {Object} [inlineQuery] 
- * @property {Object} [chosenInlineResult] 
- * @property {Object} [callbackQuery] 
- * @property {Object} [shippingQuery] 
- * @property {Object} [preCheckoutQuery] 
- * @property {Object} [channelPost] 
- * @property {Object} [editedChannelPost] 
- * @property {Object} [poll] 
- * @property {Object} [pollAnswer] 
- * @property {TelegramChatObject} [chat] 
- * @property {TelegramFromObject} [from] 
- * @property {Object} [match] 
- * @property {TelegramUpdateObject} [update] 
- * @property {Boolean} webhookReply
- */
-/**
- * @param {{text: String, destination: number, buttons?: {text: string, callback_data: string, url: string}[][]}} messageData
+ * @param {SendingMessageType} messageData
  */
 const TelegramSend = (messageData) => {
 	const replyKeyboard = Telegraf.Markup.keyboard(
@@ -304,11 +428,24 @@ const TelegramSend = (messageData) => {
 	).resize(true).reply_markup;
 
 
-	telegram.sendMessage(messageData.destination, messageData.text, {
-		parse_mode: "HTML",
-		disable_web_page_preview: true,
-		reply_markup: messageData.buttons || replyKeyboard
-	}).catch((e) => {
+	(
+		messageData.photo
+		?
+			telegram.sendPhoto(messageData.destination, {
+				source: messageData.photo
+			}, {
+				caption: messageData.text,
+				parse_mode: "HTML",
+				disable_web_page_preview: true,
+				reply_markup: messageData.buttons || replyKeyboard
+			})
+		:
+			telegram.sendMessage(messageData.destination, messageData.text, {
+				parse_mode: "HTML",
+				disable_web_page_preview: true,
+				reply_markup: messageData.buttons || replyKeyboard
+			})
+	).catch((e) => {
 		if (e.code === 403) {
 			const foundUser = USERS.find((user) => user.id === messageData.destination);
 
@@ -320,9 +457,7 @@ const TelegramSend = (messageData) => {
 
 				if (indexOfFoundUser) {
 					USERS.splice(indexOfFoundUser, 1);
-					fs.writeFile("./mirea_table_bot.users.json", JSON.stringify(USERS, false, "\t"), (e) => {
-						if (e) TelegramSendToAdmin(["Cannot write user into local .json file!", e]);
-					});
+
 					console.log(`User with id ${messageData.destination} successfly deleted. They'd had index ${indexOfFoundUser} in whole users' list but gone now.`, JSON.stringify(foundUser, false, "\t"))
 				} else {
 					console.log(`Could not deleting user with id ${messageData.destination} because of critical bug with finding proper user. Go see TelegramSend() function.`);
@@ -405,23 +540,42 @@ const Chunkify = (iArray, iChunkSize) => {
 	return outArray;
 };
 
+/**
+ * @param {String} lastCatPhoto
+ * @returns {Promise<String>}
+ */
+const GetCatImage = (lastCatPhoto) => fsReadDir(CATS.FOLDER).then((catImages) => {
+	const LocalGetRandom = () => {
+		const randomPicked = catImages[Math.floor(Math.random() * catImages.length)];
+
+		if (randomPicked === lastCatPhoto)
+			return LocalGetRandom();
+		else
+			return randomPicked;
+	};
+
+	return Promise.resolve(LocalGetRandom());
+});
+
 
 
 
 
 
 BOT.start(/** @param {import("telegraf").Context} ctx */ (ctx) => {
-	let indexOfUser = USERS.findIndex((user) => user.id === ctx.chat.id);
+	const indexOfUser = USERS.findIndex((user) => user.id === ctx.chat.id);
 	
 
 	if (indexOfUser < 0) {
 		USERS.push({
 			id: ctx.chat.id,
-			username: ctx.chat.username || ctx.chat.first_name
-		});
-
-		fs.writeFile("./mirea_table_bot.users.json", JSON.stringify(USERS, false, "\t"), (e) => {
-			if (e) TelegramSendToAdmin(["Cannot write user into local .json file!", e]);
+			username: ctx.chat.username || ctx.chat.first_name,
+			group: GROUP,
+			cats: true,
+			last_cat_photo: "",
+			morning: true,
+			evening: true,
+			late_evening: true
 		});
 	};
 	
@@ -432,15 +586,16 @@ BOT.start(/** @param {import("telegraf").Context} ctx */ (ctx) => {
 	});
 });
 
-BOT.on("text", /** @param {TelegramContext} ctx */ (ctx) => {
-	const { chat } = ctx;
-
+BOT.on("text", /** @param {import("telegraf").Context} ctx */ (ctx) => {
+	const { chat, from } = ctx;
 
 
 	if (chat && chat["type"] === "private") {
 		if (chat.id === ADMIN_TELEGRAM_DATA.id) {
 			if (ctx.message && ctx.message.text === "/show_users") {
-				return TelegramSendToAdmin(`<b>Пользователя из процесса:</b>\n<pre>${JSON.stringify(USERS, false, "\t")}</pre>`);
+				return TelegramSendToAdmin(`<b>Пользователя из процесса:</b>\n<pre>${USERS.map((user) =>
+					Object.keys(user).map((key) => `${key} ${user[key]}`).join(", ")
+				).join("\n\n")}</pre>`);
 			};
 		};
 	};
@@ -456,13 +611,14 @@ BOT.on("text", /** @param {TelegramContext} ctx */ (ctx) => {
 
 		ctx.deleteMessage(message.id).catch(console.warn);
 
+		const commandAlias = Capitalize(text.replace(/[^\w\dа-я]+/gi, "").trim());
 
-		if (COMMANDS_ALIASES[Capitalize(text.trim())]) {
-			if (typeof COMMANDS_ALIASES[Capitalize(text.trim())].caller == "function")
-				return COMMANDS_ALIASES[Capitalize(text.trim())].caller(ctx);
-			else if (typeof COMMANDS_ALIASES[Capitalize(text.trim())].text == "string")
+		if (COMMANDS_ALIASES[commandAlias]) {
+			if (typeof COMMANDS_ALIASES[commandAlias].caller == "function")
+				return COMMANDS_ALIASES[commandAlias].caller(ctx);
+			else if (typeof COMMANDS_ALIASES[commandAlias].text == "string")
 				return TelegramSend({
-					text: COMMANDS_ALIASES[Capitalize(text.trim())].text,
+					text: COMMANDS_ALIASES[commandAlias].text,
 					destination: ctx.chat.id
 				});
 		};
@@ -482,10 +638,24 @@ BOT.on("text", /** @param {TelegramContext} ctx */ (ctx) => {
 			};
 		};
 
-		return TelegramSend({
-			text: "Не понял. Чего?!",
-			destination: ctx.chat.id
-		});
+
+		const foundUser = USERS.find((user) => user.id === from.id);
+
+		if (foundUser && foundUser.waitingForTextForSettings) {
+			const settingsCommandHandler = SETTINGS_COMMANDS.find((handler) => handler.regexp.test(text));
+
+			if (settingsCommandHandler) {
+				settingsCommandHandler.caller(ctx);
+			} else
+				return TelegramSend({
+					text: "Не понял. Чего?!",
+					destination: ctx.chat.id
+				});
+		} else
+			return TelegramSend({
+				text: "Не понял. Чего?!",
+				destination: ctx.chat.id
+			});
 	};
 });
 
@@ -604,7 +774,11 @@ const BuildWeek = (iWeek) => {
 };
 
 /**
+ * @callback GettingDayLayout
  * @returns {{nameOfDay: string, layout: string}|null}
+ */
+/**
+ * @type {GettingDayLayout}
  */
 const GetToday = () => {
 	const today = DAYS_OF_WEEK[GetDay() - 1];
@@ -617,10 +791,10 @@ const GetToday = () => {
 };
 
 /**
- * @returns {{nameOfDay: string, layout: string}|null}
+ * @type {GettingDayLayout}
  */
 const GetTomorrow = () => {
-	const tomorrow = DAYS_OF_WEEK[GetDay()]
+	const tomorrow = DAYS_OF_WEEK[GetDay()];
 	if (!tomorrow) return null;
 
 	const tomorrowLayout = BuildDay(GetDay(), GetWeek() + (GetDay() === 0));
@@ -778,7 +952,7 @@ const GetTablesFile = (iLinkToXLSXFile) => new Promise((resolve, reject) => {
 
 
 		SCHEDULE = schedule;
-		if (DEV) fs.writeFile("./out/schedule.json", JSON.stringify(SCHEDULE, false, "\t"), () => {});
+		if (DEV) fsWriteFile("./out/schedule.json", JSON.stringify(SCHEDULE, false, "\t")).catch(console.warn);
 
 
 		resolve(SCHEDULE);
@@ -789,7 +963,7 @@ const GetTablesFile = (iLinkToXLSXFile) => new Promise((resolve, reject) => {
  * @returns {Promise.<String, Error>}
  */
 const GetLinksToSessionFiles = () => new Promise((resolve, reject) => {
-	// ReDo
+	// Redo when session comes closer
 	SCHEDULE = [];
 });
 
@@ -806,37 +980,71 @@ const ScheduledProcedure = () => {
 const TimeoutFunction = () => ScheduledProcedure().catch((e) => TelegramSendToAdmin([`Error on getting file.xlsx`, e]));
 
 
-
 TimeoutFunction();
 
 setInterval(() => TimeoutFunction(), SESSION ? HOUR * 3 : HOUR);
 
+setInterval(() => {
+	fsWriteFile(
+		"./mirea_table_bot.users.json",
+		JSON.stringify(USERS, (key, value) => key === "waitingForTextForSettings" ? undefined : value, "\t")
+	)
+	.catch((e) => TelegramSendToAdmin(["Cannot write user into local .json file!", e]));
+}, DEV ? MINUTE : 5 * MINUTE);
 
+
+
+/**
+ * @param {"morning" | "evening" | "late_evening"} timeOfDay 
+ * @param {GettingDayLayout} layoutFunc
+ */
+const GlobalSendToAllUsers = (timeOfDay, layoutFunc) => {
+	USERS.forEach((user) => {
+		if (!user[timeOfDay]) return;
+
+		const day = layoutFunc(user.group);
+
+		if (!day) return;
+
+
+		const LocalSendDefault = () => {
+			TelegramSend({
+				text: `${LABELS_FOR_TIMES_OF_DAY[timeOfDay]} ${day.nameOfDay}. Расписание:\n\n${day.layout}`,
+				destination: user.id
+			});
+		};
+
+
+		if (timeOfDay === "morning" && user.cats && CATS.ENABLED) {
+			const practices = day.layout.match(/\((пр)\)/i)?.[1],	
+				  labs = day.layout.match(/\((лаб)\)/i)?.[1];
+
+			if (practices || labs) {
+				GetCatImage(user.last_cat_photo)
+				.then((catImageToSend) => {
+					user.last_cat_photo = catImageToSend;
+
+					TelegramSend({
+						text: `${LABELS_FOR_TIMES_OF_DAY[timeOfDay]} ${day.nameOfDay} и сегодня есть ${labs ? "лабы" : "семинары"}! Расписание:\n\n${day.layout}`,
+						destination: user.id,
+						photo: path.join(CATS.FOLDER, catImageToSend)
+					});
+				}).catch(() => LocalSendDefault());
+			} else
+				LocalSendDefault();
+		} else
+			LocalSendDefault();
+	});
+};
 
 if (!DEV) {
-	cron.schedule("0 4 * * *", () => {
-		const today = GetToday();
+	cron.schedule("0 4 * * *", () => GlobalSendToAllUsers("morning", GetToday));
+	cron.schedule("0 16 * * *", () => GlobalSendToAllUsers("evening", GetTomorrow));
+	cron.schedule("0 19 * * *", () => GlobalSendToAllUsers("late_evening", GetTomorrow));
+};
 
-		if (today) {
-			USERS.forEach((user) => {
-				TelegramSend({
-					text: `Сегодня ${today.nameOfDay}. Расписание:\n\n${today.layout}`,
-					destination: user.id
-				});
-			});
-		};
-	});
-
-	cron.schedule("0 16,19 * * *", () => {
-		const tomorrow = GetTomorrow();
-
-		if (tomorrow) {
-			USERS.forEach((user) => {
-				TelegramSend({
-					text: `Завтра ${tomorrow.nameOfDay}. Расписание:\n\n${tomorrow.layout}`,
-					destination: user.id
-				});
-			});
-		};
+if (DEV) {
+	process.on("unhandledRejection", (reason, p) => {
+		console.warn("Unhandled Rejection at: Promise", p, "reason:", reason);
 	});
 };
