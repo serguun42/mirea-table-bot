@@ -84,7 +84,7 @@ const GettingUserWrapper = (ctx) => new Promise((resolve) => {
 	const foundUser = USERS.find((user) => user.id === from.id);
 
 	if (!foundUser) {
-		TelegramSend({
+		PushIntoSendingImmediateQueue({
 			text: "Произошла ошибка. Пожалуйста, выполните команду /start",
 			destination: chat.id,
 		});
@@ -112,7 +112,7 @@ const COMMANDS = {
 
 
 			if (!today) {
-				TelegramSend({
+				PushIntoSendingImmediateQueue({
 					text: "Сегодня неучебный день!",
 					destination: ctx.chat.id
 				});
@@ -120,12 +120,12 @@ const COMMANDS = {
 				const todayLayout = BuildDay(GetDay() - 1, GetWeek());
 
 				if (todayLayout) {
-					TelegramSend({
+					PushIntoSendingImmediateQueue({
 						text: `Сегодня ${today}. Расписание:\n\n${todayLayout}`,
 						destination: ctx.chat.id
 					});
 				} else {
-					TelegramSend({
+					PushIntoSendingImmediateQueue({
 						text: `Сегодня ${today}. Пар нет!`,
 						destination: ctx.chat.id
 					});
@@ -141,7 +141,7 @@ const COMMANDS = {
 
 
 			if (!tomorrow) {
-				TelegramSend({
+				PushIntoSendingImmediateQueue({
 					text: "Завтра неучебный день!",
 					destination: ctx.chat.id
 				});
@@ -149,12 +149,12 @@ const COMMANDS = {
 				const tomorrowLayout = BuildDay(GetDay(), GetWeek() + (GetDay() === 0));
 
 				if (tomorrowLayout) {
-					TelegramSend({
+					PushIntoSendingImmediateQueue({
 						text: `Завтра ${tomorrow}. Расписание:\n\n${tomorrowLayout}`,
 						destination: ctx.chat.id
 					});
 				} else {
-					TelegramSend({
+					PushIntoSendingImmediateQueue({
 						text: `Завтра ${tomorrow}. Пар нет!`,
 						destination: ctx.chat.id
 					});
@@ -166,7 +166,7 @@ const COMMANDS = {
 		description: "Текущая неделя",
 		/** @type {ButtonCommandCaller} */
 		caller: (ctx) => {
-			TelegramSend({
+			PushIntoSendingImmediateQueue({
 				text: `Расписание на текущую неделю (№${GetWeek()}):\n\n${BuildWeek(GetWeek())}`,
 				destination: ctx.chat.id
 			});
@@ -176,7 +176,7 @@ const COMMANDS = {
 		description: "Следующая неделя",
 		/** @type {ButtonCommandCaller} */
 		caller: (ctx) => {
-			TelegramSend({
+			PushIntoSendingImmediateQueue({
 				text: `Расписание на следующую неделю (№${GetWeek() + 1}):\n\n${BuildWeek(GetWeek() + 1)}`,
 				destination: ctx.chat.id
 			});
@@ -186,7 +186,7 @@ const COMMANDS = {
 		description: "Текущая неделя + 2",
 		/** @type {ButtonCommandCaller} */
 		caller: (ctx) => {
-			TelegramSend({
+			PushIntoSendingImmediateQueue({
 				text: `Расписание на неделю №${GetWeek() + 2}:\n\n${BuildWeek(GetWeek() + 2)}`,
 				destination: ctx.chat.id
 			});
@@ -196,7 +196,7 @@ const COMMANDS = {
 		description: "Текущая неделя + 3",
 		/** @type {ButtonCommandCaller} */
 		caller: (ctx) => {
-			TelegramSend({
+			PushIntoSendingImmediateQueue({
 				text: `Расписание на неделю №${GetWeek() + 3}:\n\n${BuildWeek(GetWeek() + 3)}`,
 				destination: ctx.chat.id
 			});
@@ -210,7 +210,7 @@ const COMMANDS = {
 
 			const foundUser = USERS.find((user) => user.id === from.id);
 
-			if (!foundUser) return TelegramSend({
+			if (!foundUser) return PushIntoSendingImmediateQueue({
 				text: "Произошла ошибка. Пожалуйста, выполните команду /start",
 				destination: chat.id,
 			});
@@ -218,7 +218,7 @@ const COMMANDS = {
 			foundUser.waitingForTextForSettings = true;
 
 
-			TelegramSend({
+			PushIntoSendingImmediateQueue({
 				text: `Вы можете настроить:
 
 🔹 Присылать ли расписание на текущий день один раз утром в 7:00.
@@ -244,7 +244,7 @@ const COMMANDS = {
 		description: "🗺 Карта",
 		/** @type {ButtonCommandCaller} */
 		caller: (ctx) => {
-			TelegramSend({
+			PushIntoSendingImmediateQueue({
 				text: "Карта на botpage.ru/map",
 				destination: ctx.chat.id,
 				buttons: Telegraf.Markup.inlineKeyboard([
@@ -278,7 +278,7 @@ const COMMANDS = {
 		/** @type {ButtonCommandCaller} */
 		caller: (ctx) => {
 			GetLinkToFile()
-				.then((link) => TelegramSend({
+				.then((link) => PushIntoSendingImmediateQueue({
 					text: `<a href="${encodeURI(link)}">${TGE(link)}</a>`,
 					destination: ctx.chat.id,
 					buttons: Telegraf.Markup.inlineKeyboard([
@@ -315,11 +315,11 @@ const SETTINGS_COMMANDS = [
 		caller: (ctx) => GettingUserWrapper(ctx).then((foundUser) => {
 			foundUser.waitingForTextForSettings = false;
 
-			TelegramSend({
+			PushIntoSendingImmediateQueue({
 				text: "Настройки закрыты (и, естественно, применены ✅)",
 				destination: ctx.chat.id,
 			});
-		}).catch(console.warn)
+		}).catch(LogMessageOrError)
 	},
 	{
 		/** @type {SettingsCommandButtonTextSetter} */
@@ -329,7 +329,7 @@ const SETTINGS_COMMANDS = [
 		caller: (ctx) => GettingUserWrapper(ctx).then((foundUser) => {
 			foundUser.morning = !foundUser.morning;
 
-			TelegramSend({
+			PushIntoSendingImmediateQueue({
 				text: `🕖 Рассылка утром – ${foundUser.morning ? "включена" : "выключена"}`,
 				destination: ctx.chat.id,
 				buttons: Telegraf.Markup.keyboard(
@@ -338,7 +338,7 @@ const SETTINGS_COMMANDS = [
 					)
 				).reply_markup
 			});
-		}).catch(console.warn)
+		}).catch(LogMessageOrError)
 	},
 	{
 		/** @type {SettingsCommandButtonTextSetter} */
@@ -348,7 +348,7 @@ const SETTINGS_COMMANDS = [
 		caller: (ctx) => GettingUserWrapper(ctx).then((foundUser) => {
 			foundUser.evening = !foundUser.evening;
 
-			TelegramSend({
+			PushIntoSendingImmediateQueue({
 				text: `🕖 Рассылка вечером – ${foundUser.evening ? "включена" : "выключена"}`,
 				destination: ctx.chat.id,
 				buttons: Telegraf.Markup.keyboard(
@@ -357,7 +357,7 @@ const SETTINGS_COMMANDS = [
 					)
 				).reply_markup
 			});
-		}).catch(console.warn)
+		}).catch(LogMessageOrError)
 	},
 	{
 		/** @type {SettingsCommandButtonTextSetter} */
@@ -367,7 +367,7 @@ const SETTINGS_COMMANDS = [
 		caller: (ctx) => GettingUserWrapper(ctx).then((foundUser) => {
 			foundUser.late_evening = !foundUser.late_evening;
 
-			TelegramSend({
+			PushIntoSendingImmediateQueue({
 				text: `🕖 Рассылка поздним вечером – ${foundUser.late_evening ? "включена" : "выключена"}`,
 				destination: ctx.chat.id,
 				buttons: Telegraf.Markup.keyboard(
@@ -376,7 +376,7 @@ const SETTINGS_COMMANDS = [
 					)
 				).reply_markup
 			});
-		}).catch(console.warn)
+		}).catch(LogMessageOrError)
 	},
 	{
 		/** @type {SettingsCommandButtonTextSetter} */
@@ -386,7 +386,7 @@ const SETTINGS_COMMANDS = [
 		caller: (ctx) => GettingUserWrapper(ctx).then((foundUser) => {
 			foundUser.cats = !foundUser.cats;
 
-			TelegramSend({
+			PushIntoSendingImmediateQueue({
 				text: `🐱 Котики – ${foundUser.cats ? "включены" : "выключены"}`,
 				destination: ctx.chat.id,
 				buttons: Telegraf.Markup.keyboard(
@@ -395,7 +395,7 @@ const SETTINGS_COMMANDS = [
 					)
 				).reply_markup
 			});
-		}).catch(console.warn)
+		}).catch(LogMessageOrError)
 	}
 ];
 
@@ -419,8 +419,28 @@ const telegram = BOT.telegram;
  * @property {String} text
  * @property {{text: string, callback_data: string, url: string}[][]} [buttons]
  * @property {String} [photo]
- * 
+ */
+/** @type {SendingMessageType[]} */
+const IMMEDIATE_QUEUE = [];
+
+/**
  * @param {SendingMessageType} messageData
+ * @returns {Number}
+ */
+const PushIntoSendingImmediateQueue = (messageData) => IMMEDIATE_QUEUE.push(messageData);
+
+/** @type {SendingMessageType[]} */
+const MAILING_QUEUE = [];
+
+/**
+ * @param {SendingMessageType} messageData
+ * @returns {Number}
+ */
+const PushIntoSendingMailingQueue = (messageData) => MAILING_QUEUE.push(messageData);
+
+/**
+ * @param {SendingMessageType} messageData
+ * @returns {void}
  */
 const TelegramSend = (messageData) => {
 	const replyKeyboard = Telegraf.Markup.keyboard(
@@ -450,41 +470,50 @@ const TelegramSend = (messageData) => {
 			const foundUser = USERS.find((user) => user.id === messageData.destination);
 
 			if (foundUser) {
-				console.log(new Date());
-				console.log(`Deleting user with id ${messageData.destination}`, JSON.stringify(foundUser, false, "\t"));
-
 				const indexOfFoundUser = USERS.findIndex((user) => user.id === messageData.destination);
 
 				if (indexOfFoundUser) {
 					USERS.splice(indexOfFoundUser, 1);
 
-					console.log(`User with id ${messageData.destination} successfly deleted. They'd had index ${indexOfFoundUser} in whole users' list but gone now.`, JSON.stringify(foundUser, false, "\t"))
+					LogMessageOrError(`Successfully deleted user with id = ${messageData.destination}. They'd had index ${indexOfFoundUser} in users list but gone now.`, JSON.stringify(foundUser, false, "\t"));
 				} else {
-					console.log(`Could not deleting user with id ${messageData.destination} because of critical bug with finding proper user. Go see TelegramSend() function.`);
+					LogMessageOrError(`Could not deleting user with id ${messageData.destination} because of critical bug with finding proper user. Go see PushIntoSendingImmediateQueue() function.`);
 				};
 			} else {
-				console.error(new Data());
-				console.error(`Cannot remove user with id ${messageData.destination} because they're not in out users' list`);
-				console.error(e);
+				LogMessageOrError(`Cannot remove user with id ${messageData.destination} because they're not in out users' list!`, e);
 			};
 		} else {
-			console.error(e);
+			LogMessageOrError(`Unknown error code`, e);
 		};
 	});
 };
 
+setInterval(() => {
+	const messageData = IMMEDIATE_QUEUE.shift();
+
+	if (messageData && messageData.destination)
+		TelegramSend(messageData);
+}, 50);
+
+setInterval(() => {
+	const messageData = MAILING_QUEUE.shift();
+
+	if (messageData && messageData.destination)
+		TelegramSend(messageData);
+}, 2000);
+
 /**
- * @param {String[]|String} message
+ * @param {String | String[] | Error | Error[]} message
+ * @returns {void}
  */
 const TelegramSendToAdmin = (message) => {
 	if (!message) return;
 
 
-	if (message instanceof Array) {
-		console.error(new Date().toISOString());
-
-		message.forEach((err) => console.error(err));
-	};
+	if (message instanceof Array)
+		LogMessageOrError(...message);
+	else if (message instanceof Error)
+		LogMessageOrError(message);
 
 
 	telegram.sendMessage(ADMIN_TELEGRAM_DATA.id, message instanceof Array ? message.join("\n") : message, {
@@ -493,16 +522,33 @@ const TelegramSendToAdmin = (message) => {
 	});
 };
 
-const TGE = iStr => {
-	if (!iStr) return "";
+/**
+ * @param {String} iStringToEscape
+ * @returns {String}
+ */
+const TGE = iStringToEscape => {
+	if (!iStringToEscape) return "";
 	
-	if (typeof iStr === "string")
-		return iStr
+	if (typeof iStringToEscape === "string")
+		return iStringToEscape
 			.replace(/\&/g, "&amp;")
 			.replace(/\</g, "&lt;")
 			.replace(/\>/g, "&gt;");
 	else
-		return TGE(iStr.toString());
+		return TGE(iStringToEscape.toString());
+};
+
+/**
+ * @param  {Error[] | String[]} args
+ * @returns {void}
+ */
+const LogMessageOrError = (...args) => {
+	const containsAnyError = (args.findIndex((message) => message instanceof Error) > -1),
+		  out = (containsAnyError ? console.error : console.log);
+
+	out(new Date());
+	args.forEach((message) => out(message));
+	out("~~~~~~~~~~~\n\n");
 };
 
 
@@ -510,7 +556,7 @@ const TGE = iStr => {
 
 
 
-// Move To Utils
+// Move To Utils. One day…
 /**
  * @param {String} iString
  * @returns {String}
@@ -580,7 +626,7 @@ BOT.start(/** @param {import("telegraf").Context} ctx */ (ctx) => {
 	};
 	
 
-	TelegramSend({
+	PushIntoSendingImmediateQueue({
 		text: COMMANDS["help"].text,
 		destination: ctx.chat.id
 	});
@@ -593,9 +639,9 @@ BOT.on("text", /** @param {import("telegraf").Context} ctx */ (ctx) => {
 	if (chat && chat["type"] === "private") {
 		if (chat.id === ADMIN_TELEGRAM_DATA.id) {
 			if (ctx.message && ctx.message.text === "/show_users") {
-				return TelegramSendToAdmin(`<b>Пользователя из процесса:</b>\n<pre>${USERS.map((user) =>
-					Object.keys(user).map((key) => `${key} ${user[key]}`).join(", ")
-				).join("\n\n")}</pre>`);
+				return TelegramSendToAdmin(`<b>Пользователя из процесса:</b>\n${USERS.map((user) =>
+					Object.keys(user).map((key) => `<i>${TGE(key)}</i> <code>${TGE(user[key])}</code>`).join(", ")
+				).join("\n\n")}`);
 			};
 		};
 	};
@@ -609,7 +655,7 @@ BOT.on("text", /** @param {import("telegraf").Context} ctx */ (ctx) => {
 		if (!text) return false;
 
 
-		ctx.deleteMessage(message.id).catch(console.warn);
+		ctx.deleteMessage(message.id).catch(LogMessageOrError);
 
 		const commandAlias = Capitalize(text.replace(/[^\w\dа-я]+/gi, "").trim());
 
@@ -617,7 +663,7 @@ BOT.on("text", /** @param {import("telegraf").Context} ctx */ (ctx) => {
 			if (typeof COMMANDS_ALIASES[commandAlias].caller == "function")
 				return COMMANDS_ALIASES[commandAlias].caller(ctx);
 			else if (typeof COMMANDS_ALIASES[commandAlias].text == "string")
-				return TelegramSend({
+				return PushIntoSendingImmediateQueue({
 					text: COMMANDS_ALIASES[commandAlias].text,
 					destination: ctx.chat.id
 				});
@@ -631,7 +677,7 @@ BOT.on("text", /** @param {import("telegraf").Context} ctx */ (ctx) => {
 				if (typeof COMMANDS[commandMatch[1]].caller == "function")
 					return COMMANDS[commandMatch[1]].caller(ctx);
 				else if (typeof COMMANDS[commandMatch[1]].text == "string")
-					return TelegramSend({
+					return PushIntoSendingImmediateQueue({
 						text: COMMANDS[commandMatch[1]].text,
 						destination: ctx.chat.id
 					});
@@ -644,15 +690,15 @@ BOT.on("text", /** @param {import("telegraf").Context} ctx */ (ctx) => {
 		if (foundUser && foundUser.waitingForTextForSettings) {
 			const settingsCommandHandler = SETTINGS_COMMANDS.find((handler) => handler.regexp.test(text));
 
-			if (settingsCommandHandler) {
+			if (settingsCommandHandler)
 				settingsCommandHandler.caller(ctx);
-			} else
-				return TelegramSend({
+			else
+				return PushIntoSendingImmediateQueue({
 					text: "Не понял. Чего?!",
 					destination: ctx.chat.id
 				});
 		} else
-			return TelegramSend({
+			return PushIntoSendingImmediateQueue({
 				text: "Не понял. Чего?!",
 				destination: ctx.chat.id
 			});
@@ -807,7 +853,7 @@ const GetTomorrow = () => {
 
 /**
  * @param {String} iRawComplexLesson
- * @returns {null|String[]}
+ * @returns {String[] | null}
  */
 const ParseLessonPartsAndOptions = iRawComplexLesson => {
 	if (!iRawComplexLesson) return null;
@@ -952,7 +998,7 @@ const GetTablesFile = (iLinkToXLSXFile) => new Promise((resolve, reject) => {
 
 
 		SCHEDULE = schedule;
-		if (DEV) fsWriteFile("./out/schedule.json", JSON.stringify(SCHEDULE, false, "\t")).catch(console.warn);
+		if (DEV) fsWriteFile("./out/schedule.json", JSON.stringify(SCHEDULE, false, "\t")).catch(LogMessageOrError);
 
 
 		resolve(SCHEDULE);
@@ -982,7 +1028,7 @@ const TimeoutFunction = () => ScheduledProcedure().catch((e) => TelegramSendToAd
 
 TimeoutFunction();
 
-setInterval(() => TimeoutFunction(), SESSION ? HOUR * 3 : HOUR);
+setInterval(() => TimeoutFunction(), HOUR * 12);
 
 setInterval(() => {
 	fsWriteFile(
@@ -990,7 +1036,7 @@ setInterval(() => {
 		JSON.stringify(USERS, (key, value) => key === "waitingForTextForSettings" ? undefined : value, "\t")
 	)
 	.catch((e) => TelegramSendToAdmin(["Cannot write user into local .json file!", e]));
-}, DEV ? MINUTE : 5 * MINUTE);
+}, DEV ? MINUTE : 15 * MINUTE);
 
 
 
@@ -1008,7 +1054,7 @@ const GlobalSendToAllUsers = (timeOfDay, layoutFunc) => {
 
 
 		const LocalSendDefault = () => {
-			TelegramSend({
+			PushIntoSendingMailingQueue({
 				text: `${LABELS_FOR_TIMES_OF_DAY[timeOfDay]} ${day.nameOfDay}. Расписание:\n\n${day.layout}`,
 				destination: user.id
 			});
@@ -1024,7 +1070,7 @@ const GlobalSendToAllUsers = (timeOfDay, layoutFunc) => {
 				.then((catImageToSend) => {
 					user.last_cat_photo = catImageToSend;
 
-					TelegramSend({
+					PushIntoSendingMailingQueue({
 						text: `${LABELS_FOR_TIMES_OF_DAY[timeOfDay]} ${day.nameOfDay} и сегодня есть ${labs ? "лабы" : "семинары"}! Расписание:\n\n${day.layout}`,
 						destination: user.id,
 						photo: path.join(CATS.FOLDER, catImageToSend)
@@ -1045,6 +1091,6 @@ if (!DEV) {
 
 if (DEV) {
 	process.on("unhandledRejection", (reason, p) => {
-		console.warn("Unhandled Rejection at: Promise", p, "reason:", reason);
+		LogMessageOrError("Unhandled Rejection at: Promise", p, "reason:", reason);
 	});
 };

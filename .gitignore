@@ -2,5 +2,7 @@
 /node_modules/
 package-lock.json
 
+/data/
 /out/
 /local-stuff/
+*test.js
