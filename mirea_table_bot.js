@@ -1028,7 +1028,7 @@ const TimeoutFunction = () => ScheduledProcedure().catch((e) => TelegramSendToAd
 
 TimeoutFunction();
 
-setInterval(() => TimeoutFunction(), HOUR * 12);
+setInterval(() => TimeoutFunction(), HOUR * 3);
 
 setInterval(() => {
 	fsWriteFile(
