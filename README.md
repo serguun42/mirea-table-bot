@@ -1,4 +1,8 @@
-# mirea-table-bot
+# Bot has moved to [MSS Project](https://github.com/serguun42/mss)
+
+![MSS](https://mirea.xyz/img/logo_wide.png)
+
+# mirea-table-boty
 Telegram Bot for MIREA's Schedule
 
 
